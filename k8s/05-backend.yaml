@@ -1,0 +1,60 @@
+# The Node.js API: 2 pods, settings from the ConfigMap + Secret
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend
+  namespace: tasks-app
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+        - name: backend
+          image: tasks-backend:v1
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 5000
+          envFrom:
+            - configMapRef:
+                name: tasks-config
+            - secretRef:
+                name: tasks-db-secret
+          # Ready = the API can reach the database -> send it traffic
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          # Alive = the Node process is listening -> otherwise restart it
+          livenessProbe:
+            tcpSocket:
+              port: 5000
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+---
+# Stable name "backend" that the frontend (nginx) will call
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend
+  namespace: tasks-app
+spec:
+  selector:
+    app: backend
+  ports:
+    - port: 5000
+      targetPort: 5000
